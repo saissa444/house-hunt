@@ -203,8 +203,8 @@ select.sort{height:36px;border-radius:10px;border:1px solid var(--line);backgrou
   <div class="sheet-b">
     <div class="sec">
       <h3>後端連線</h3>
-      <label class="field"><span>Apps Script 網頁應用程式網址（結尾是 /exec）</span><input id="cfgApi" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="https://script.google.com/macros/s/…/exec"></label>
-      <label class="field"><span>通行碼（Code.gs 最上面的 API_KEY）</span><input id="cfgKey" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
+      <label class="field"><span>後端網址（Cloudflare Worker 的 workers.dev 網址）</span><input id="cfgApi" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="https://名稱.帳號.workers.dev"></label>
+      <label class="field"><span>通行碼（後端程式最上面的 API_KEY）</span><input id="cfgKey" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
       <div class="row"><button class="btn pri" id="cfgSave">儲存並測試</button><button class="btn" id="cfgLink">複製設定連結</button></div>
       <p class="hint">「設定連結」可以傳到其他裝置開啟，免再輸入一次。連結裡含通行碼，請只傳給自己。</p>
       <div class="log" id="cfgLog" hidden></div>
@@ -286,7 +286,7 @@ function api(params){
     .then(function(r){
       clearTimeout(timer);
       var j; try { j = JSON.parse(r.text); } catch(e){
-        throw new Error(r.status === 200 ? '後端回傳的不是資料（請確認部署的存取權是「任何人」，網址結尾是 /exec）' : '後端回應 HTTP ' + r.status);
+        throw new Error(r.status === 200 ? '後端回傳的不是資料（請確認後端網址正確、後端已部署）' : '後端回應 HTTP ' + r.status);
       }
       if (!j.ok) throw new Error(j.error || '後端發生錯誤');
       return j;
@@ -468,7 +468,7 @@ function render(){
   }
   if (!cfg.api){
     count.textContent = ''; list.innerHTML = '';
-    tail.innerHTML = '<div class="empty"><h3>先完成一次性設定</h3>這個 App 需要你自己的 Google Apps Script 後端來讀取仲介網站。<br>部署好之後，把網址貼到設定裡就能開始看房。<br><br><button class="btn pri" id="goSet">開啟設定</button></div>';
+    tail.innerHTML = '<div class="empty"><h3>先完成一次性設定</h3>這個 App 需要你自己的後端來讀取仲介網站。<br>把後端網址和通行碼貼到設定裡就能開始看房。<br><br><button class="btn pri" id="goSet">開啟設定</button></div>';
     return;
   }
   var totalAll = tasks.reduce(function(s, t){ return s + (t.total || 0); }, 0);
