@@ -317,11 +317,13 @@ function taskFilter(city){
 
 /* ================= 搜尋 ================= */
 function startSearch(){
-  seq++; items = []; tasks = []; autoRounds = 0;
+  seq++; items = []; tasks = []; autoRounds = 0; zoneBusy = false; zoneFail = 0;
   if (cfg.api) Object.keys(CITIES).forEach(function(city){
     if (!filter.cities[city].on) return;
     SRC_IDS.forEach(function(src){
-      if (filter.srcs[src]) tasks.push({ src:src, city:city, page:0, total:null, got:0, done:false, busy:false, error:null, skipped:'' });
+      if (!filter.srcs[src]) return;
+      var noZone = !!filter.zone && src !== 'yc';   // 使用分區只有永慶讀得到，其他來源直接略過，不發請求
+      tasks.push({ src:src, city:city, page:0, total:noZone ? 0 : null, got:0, done:noZone, busy:false, error:null, skipped:noZone ? '沒有使用分區資料' : '' });
     });
   });
   render();
@@ -339,6 +341,7 @@ function loadTask(t){
     t.got += (j.rawCount != null ? j.rawCount : (j.items || []).length);
     if (!j.rawCount || t.page * (j.pageSize || 18) >= j.total || t.page >= 60) t.done = true;
     render();
+    if (filter.zone) loadZones(true);   // 有設使用分區時，新載入的物件自動去讀
   }, function(e){
     if (my !== seq) return;
     t.busy = false; t.error = e.message; render();
@@ -455,7 +458,7 @@ function renderSrcs(){
     if (t.skipped) cls += ' skip';
     var txt = t.skipped ? esc(t.skipped.replace(/^(樂屋網|好房網|永慶)/, ''))
       : t.error ? esc(t.error) + ' <button data-retry="' + i + '">重試</button>'
-      : t.total == null ? '讀取中…' : '<span class="num">' + fmt(Math.min(t.got, t.total)) + '</span>／<b class="num">' + fmt(t.total) + '</b>' + (t.kwLocal ? '（關鍵字由 App 逐頁比對）' : '');
+      : t.total == null ? '讀取中…' : '<span class="num">' + fmt(Math.min(t.got, t.total)) + '</span>／<b class="num">' + fmt(t.total) + '</b>' + (t.done && t.total ? ' ✓' : '') + (t.kwLocal ? '（關鍵字由 App 逐頁比對）' : '');
     return '<span class="' + cls + '"><i class="dot"></i><b>' + SRC_NAME[t.src] + '</b>' + esc(t.city.slice(0, 2)) + ' ' + txt + '</span>';
   }).join('');
 }
@@ -464,7 +467,7 @@ function cardHtml(g){
   if (m.type) facts.push(esc(m.type));
   if (m.ping) facts.push('建坪 <span class="num">' + fmt(m.ping) + '</span>' + (m.mainPing && m.mainPing !== m.ping ? '（主 <span class="num">' + fmt(m.mainPing) + '</span>）' : ''));
   else if (m.landPing) facts.push('地坪 <span class="num">' + fmt(m.landPing) + '</span>');
-  if (m.layout) facts.push(esc(m.layout.replace(/\(含加蓋.*$/, '')));
+  if (m.layout) facts.push(esc(m.layout.replace(/\(含加蓋.*$/, '（含加蓋）')));
   if (m.floor) facts.push(esc(m.floor) + '樓');
   if (m.presale) facts.push('預售'); else if (m.age != null) facts.push('<span class="num">' + fmt(m.age) + '</span>年');
   var tags = g.members.map(function(x){ return '<span class="tag ' + x.src + '">' + esc(x.brand || SRC_NAME[x.src]) + '</span>'; });
@@ -514,13 +517,16 @@ function render(){
   var html = '';
   if (!tasks.length) html = '<div class="empty"><h3>沒有可搜尋的範圍</h3>請在篩選裡至少開啟一個縣市和一個來源。</div>';
   else if (!groups.length && anyBusy()) html = '<div class="empty"><span class="spin"></span> 正在讀取物件…</div>';
-  else if (!groups.length && filter.zone && hiddenByZone) html = '<div class="empty"><h3>尚未比對使用分區</h3>使用分區要逐筆讀取物件頁才知道。<br>目前已載入 ' + hiddenByZone + ' 筆物件。<br><br><button class="btn pri" id="zoneLoad">讀取已載入物件的使用分區</button></div>';
+  else if (!groups.length && filter.zone && zoneBusy) html = '<div class="empty"><span class="spin"></span> 正在逐筆讀取使用分區…</div>';
+  else if (!groups.length && filter.zone && pendingDetailItems().length) html = '<div class="empty"><h3>使用分區讀取失敗</h3>有 ' + pendingDetailItems().length + ' 筆物件還沒讀到使用分區。<br><br><button class="btn pri" id="zoneLoad">再試一次</button></div>';
+  else if (!groups.length && filter.zone && hiddenByZone && !hasMore()) html = '<div class="empty"><h3>沒有符合的使用分區</h3>已比對 ' + hiddenByZone + ' 筆永慶物件，沒有使用分區含「' + esc(filter.zone) + '」的。</div>';
   else if (!groups.length && !tasks.some(function(t){ return t.error; }) && !hasMore()) html = '<div class="empty"><h3>沒有符合條件的物件</h3>試著放寬總價、坪數或區域。</div>';
   else if (!groups.length && tasks.every(function(t){ return t.error; })) html = '<div class="empty"><h3>讀取失敗</h3>請看上方各來源的錯誤訊息，或到設定按「儲存並測試」。</div>';
   if (groups.length || hasMore()){
     if (filter.zone && groups.length){
       var pending = pendingDetailItems().length;
-      if (pending) html += '<button class="more" id="zoneLoad">再讀取 ' + pending + ' 筆的使用分區</button>';
+      if (zoneBusy) html += '<p class="note"><span class="spin"></span> 正在讀取其餘 ' + pending + ' 筆的使用分區…</p>';
+      else if (pending) html += '<button class="more" id="zoneLoad">有 ' + pending + ' 筆沒讀到使用分區，再試一次</button>';
     }
     if (hasMore()) html += '<button class="more" id="more"' + (anyBusy() ? ' disabled' : '') + '>' + (anyBusy() ? '<span class="spin"></span> 讀取中…' : '載入更多物件') + '</button>';
     else if (groups.length) html += '<p class="note">已載入全部符合條件的物件</p>';
@@ -556,7 +562,7 @@ function renderFilter(){
   h += '<div class="sec"><h3>車位</h3><div class="chips">' + PARKS.map(function(x){ return '<button class="chip' + (f.park === x[0] ? ' on' : '') + '" data-park="' + x[0] + '"' + (x[0] ? dis : '') + '>' + x[1] + '</button>'; }).join('') + '</div></div>';
   h += '<div class="sec"><h3>使用分區 <small>原「地目」</small></h3><div class="chips">' + ['不限'].concat(ZONES).map(function(z){ var v = z === '不限' ? '' : z; return '<button class="chip' + (f.zone === v ? ' on' : '') + '" data-zone="' + v + '">' + z + '</button>'; }).join('') + '</div>' +
     '<div class="range" style="margin-top:8px"><input data-k="zone" placeholder="或輸入關鍵字，例如：第三種住宅區" value="' + esc(ZONES.indexOf(f.zone) >= 0 ? '' : f.zone) + '" style="text-align:left"></div>' +
-    '<p class="hint">地目制度已廢止，現在標示的是「土地使用分區」。這項只有永慶的物件讀得到，而且要逐筆讀取物件頁，搜尋後需再按一次讀取。</p></div>';
+    '<p class="hint">地目制度已廢止，現在標示的是「土地使用分區」。這項只有永慶的物件讀得到，設定後會只搜尋永慶，並自動逐筆讀取物件頁，速度會比較慢。</p></div>';
   h += '<div class="sec"><h3>來源</h3><div class="chips">' + SRCS.map(function(x){ return '<button class="chip' + (f.srcs[x[0]] ? ' on' : '') + '" data-src="' + x[0] + '">' + x[2] + '</button>'; }).join('') + '</div><p class="hint">樂屋網上有信義、住商、中信、太平洋等各家的物件；好房網只能篩區域、總價、坪數、房數、樓層。</p></div>';
   var sc = $('filterBody').scrollTop; $('filterBody').innerHTML = h; $('filterBody').scrollTop = sc;
 }
@@ -665,14 +671,23 @@ function pendingDetailItems(){
   return items.filter(passes).filter(function(x){ if (x.src !== 'yc') return false; var d = details[x.src + '|' + x.id]; return !d || d.temp; });
 }
 var zoneBusy = false;
-function loadZones(){
+var zoneFail = 0;
+function loadZones(auto){
   if (zoneBusy) return;
+  if (!auto) zoneFail = 0;
   var list = pendingDetailItems().slice(0, 48);
-  if (!list.length){ toast('已載入的物件都讀過了'); return; }
+  if (!list.length){ if (!auto) toast('已載入的物件都讀過了'); return; }
   list.forEach(function(x){ delete details[x.src + '|' + x.id]; });
-  zoneBusy = true; toast('正在讀取 ' + list.length + ' 筆的使用分區…');
+  zoneBusy = true; if (!auto) toast('正在讀取 ' + list.length + ' 筆的使用分區…');
+  render();
   var my = seq;
-  fetchDetails(list).then(function(){ zoneBusy = false; if (my === seq){ render(); toast('讀取完成'); } });
+  fetchDetails(list).then(function(){
+    zoneBusy = false; if (my !== seq) return;
+    var failed = list.some(function(x){ var d = details[x.src + '|' + x.id]; return d && d.temp; });
+    zoneFail = failed ? zoneFail + 1 : 0;
+    render();
+    if (filter.zone && zoneFail < 2 && pendingDetailItems().length) loadZones(true);   // 還有沒讀的就接著讀；連續失敗兩次就停，改由按鈕手動重試
+  });
 }
 var openGid = null;
 function openDetail(gid){
