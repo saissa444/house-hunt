@@ -55,12 +55,14 @@ input,select{font-size:16px}
 .count{font-weight:600;margin-right:auto}
 .count small{font-weight:400;color:var(--sub)}
 select.sort{height:36px;border-radius:10px;border:1px solid var(--line);background:var(--card);padding:0 8px;max-width:150px}
-.srcs{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+.srcs{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px}
+.src{padding:2px 7px;gap:4px}
 .src{white-space:nowrap}.src.err{white-space:normal}
 .src{font-size:12.5px;border:1px solid var(--line);border-radius:8px;padding:3px 8px;color:var(--sub);background:var(--card);display:flex;gap:6px;align-items:center}
 .src b{font-weight:600;color:var(--ink)}
 .src.err{border-color:var(--err);color:var(--err)}
 .src .dot{width:7px;height:7px;border-radius:50%;background:var(--ok)}
+.src.skip{opacity:.65}.src.skip .dot{background:var(--sub)}
 .src.err .dot{background:var(--err)} .src.busy .dot{background:var(--warn);animation:pulse 1s infinite}
 @keyframes pulse{50%{opacity:.3}}
 .src button{color:var(--accent);font-weight:600}
@@ -80,6 +82,10 @@ select.sort{height:36px;border-radius:10px;border:1px solid var(--line);backgrou
 .tags{display:flex;flex-wrap:wrap;gap:4px;margin-top:auto;padding-top:3px}
 .tag{font-size:11.5px;border-radius:5px;padding:1px 6px;background:var(--chip);color:var(--sub);white-space:nowrap}
 .tag.sinyi{background:var(--chip);background:color-mix(in srgb,var(--sinyi) 14%,transparent);color:var(--sinyi);font-weight:600}
+.tag.rakuya{background:var(--chip);background:color-mix(in srgb,#e8590c 14%,transparent);color:#c2470a;font-weight:600}
+.tag.hf{background:var(--chip);background:color-mix(in srgb,#1971c2 14%,transparent);color:#1971c2;font-weight:600}
+@media (prefers-color-scheme:dark){.tag.rakuya{color:#ffa94d}.tag.hf{color:#74c0fc}}
+.tag.flag{background:var(--err);color:#fff}
 .tag.yc{background:var(--chip);background:color-mix(in srgb,var(--yc) 12%,transparent);color:var(--yc);font-weight:600}
 .tag.zone{background:var(--chip);background:color-mix(in srgb,var(--accent) 14%,transparent);color:var(--accent)}
 .fav{position:absolute;top:4px;right:4px;width:38px;height:38px;font-size:20px;line-height:38px;text-align:center;color:var(--sub);z-index:2}
@@ -212,7 +218,7 @@ select.sort{height:36px;border-radius:10px;border:1px solid var(--line);backgrou
     </div>
     <div class="sec">
       <h3>資料說明</h3>
-      <p class="hint" style="font-size:13.5px">物件資料即時讀自信義房屋與永慶房仲網的公開搜尋頁，僅供個人看屋參考；實際價格與屋況以各仲介網站為準。兩家網站改版時可能暫時讀不到，上方來源列會顯示錯誤。</p>
+      <p class="hint" style="font-size:13.5px">物件資料即時讀自永慶房仲網、樂屋網、好房網的公開搜尋頁，僅供個人看屋參考；實際價格與屋況以各網站為準。來源網站改版時可能暫時讀不到，上方來源列會顯示錯誤。</p>
     </div>
   </div>
 </section>
@@ -230,7 +236,9 @@ var USES = ['不限','住宅','店面','辦公','廠房','土地','車位','其�
 var FORMS = ['公寓','華廈','電梯大樓','透天別墅'];
 var ROOMS = [1,2,3,4,5];
 var PARKS = [['','不限'],['any','有車位'],['坡道平面','坡道平面'],['坡道機械','坡道機械'],['昇降平面','昇降平面'],['昇降機械','昇降機械']];
-var SRC_NAME = { sinyi:'信義', yc:'永慶' };
+var SRCS = [['yc','永慶','永慶房仲網'],['rakuya','樂屋','樂屋網'],['hf','好房','好房網']];
+var SRC_IDS = SRCS.map(function(x){ return x[0]; });
+var SRC_NAME = { sinyi:'信義' }; SRCS.forEach(function(x){ SRC_NAME[x[0]] = x[1]; });
 var ZONES = ['住宅區','商業區','工業區','農業區','保護區','道路用地'];
 var LS = { cfg:'hh.cfg.v1', filter:'hh.filter.v1', fav:'hh.fav.v1', sort:'hh.sort.v1' };
 
@@ -243,7 +251,7 @@ function toNum(v){ if (v === '' || v == null) return null; var n = Number(v); re
 var toastT; function toast(m){ var t = $('toast'); t.textContent = m; t.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(function(){ t.classList.remove('show'); }, 2400); }
 
 function defaultFilter(){
-  return { cities:{ '台北市':{on:true,dists:[]}, '新北市':{on:true,dists:[]} }, pmin:null, pmax:null, amin:null, amax:null, mmin:null, mmax:null, fmin:null, fmax:null, park:'', rmin:null, rmax:null, use:'住宅', forms:[], srcs:{sinyi:true,yc:true}, zone:'' };
+  return { cities:{ '台北市':{on:true,dists:[]}, '新北市':{on:true,dists:[]} }, pmin:null, pmax:null, amin:null, amax:null, mmin:null, mmax:null, fmin:null, fmax:null, park:'', kw:'', rmin:null, rmax:null, use:'住宅', forms:[], srcs:{yc:true,rakuya:true,hf:true}, zone:'' };
 }
 function normFilter(f){
   var d = defaultFilter(); f = f || {};
@@ -261,8 +269,10 @@ function normFilter(f){
   if (d.use && d.use !== '住宅') d.forms = [];
   d.park = PARKS.some(function(x){ return x[0] === f.park; }) ? f.park : '';
   if (d.use === '土地' || d.use === '車位'){ d.mmin = d.mmax = d.fmin = d.fmax = d.rmin = d.rmax = null; d.park = ''; }
-  d.srcs = { sinyi: !(f.srcs && f.srcs.sinyi === false), yc: !(f.srcs && f.srcs.yc === false) };
+  d.srcs = {}; SRC_IDS.forEach(function(k){ d.srcs[k] = !(f.srcs && f.srcs[k] === false); });
+  if (!SRC_IDS.some(function(k){ return d.srcs[k]; })) d.srcs.yc = true;
   d.zone = typeof f.zone === 'string' ? f.zone.trim().slice(0, 20) : '';
+  d.kw = typeof f.kw === 'string' ? f.kw.replace(/[\/\\?#&%"'<>]/g, '').trim().slice(0, 20) : '';
   return d;
 }
 
@@ -302,7 +312,7 @@ function api(params){
 }
 function taskFilter(city){
   var c = filter.cities[city];
-  return { city:city, dists:c.dists, pmin:filter.pmin, pmax:filter.pmax, amin:filter.amin, amax:filter.amax, rmin:filter.rmin, rmax:filter.rmax, mmin:filter.mmin, mmax:filter.mmax, fmin:filter.fmin, fmax:filter.fmax, park:filter.park, use:filter.use, forms:filter.forms };
+  return { city:city, dists:c.dists, pmin:filter.pmin, pmax:filter.pmax, amin:filter.amin, amax:filter.amax, rmin:filter.rmin, rmax:filter.rmax, mmin:filter.mmin, mmax:filter.mmax, fmin:filter.fmin, fmax:filter.fmax, park:filter.park, kw:filter.kw, use:filter.use, forms:filter.forms };
 }
 
 /* ================= 搜尋 ================= */
@@ -310,8 +320,8 @@ function startSearch(){
   seq++; items = []; tasks = []; autoRounds = 0;
   if (cfg.api) Object.keys(CITIES).forEach(function(city){
     if (!filter.cities[city].on) return;
-    ['sinyi','yc'].forEach(function(src){
-      if (filter.srcs[src]) tasks.push({ src:src, city:city, page:0, total:null, got:0, done:false, busy:false, error:null });
+    SRC_IDS.forEach(function(src){
+      if (filter.srcs[src]) tasks.push({ src:src, city:city, page:0, total:null, got:0, done:false, busy:false, error:null, skipped:'' });
     });
   });
   render();
@@ -323,7 +333,7 @@ function loadTask(t){
   var my = seq; t.busy = true; t.error = null; renderSrcs();
   return api({ action:'search', src:t.src, page:t.page + 1, f:JSON.stringify(taskFilter(t.city)) }).then(function(j){
     if (my !== seq) return;
-    t.busy = false; t.page = j.page; t.total = j.total;
+    t.busy = false; t.page = j.page; t.total = j.total; t.skipped = j.skipped || ''; t.kwLocal = !!j.kwLocal;
     var seen = {}; items.forEach(function(x){ seen[x.src + '|' + x.id] = 1; });
     (j.items || []).forEach(function(x){ if (!seen[x.src + '|' + x.id]){ seen[x.src + '|' + x.id] = 1; items.push(x); } });
     t.got += (j.rawCount != null ? j.rawCount : (j.items || []).length);
@@ -410,9 +420,9 @@ function activeCount(f){
   var n = 0;
   Object.keys(CITIES).forEach(function(c){ if (!f.cities[c].on || f.cities[c].dists.length) n++; });
   if (f.pmin || f.pmax) n++; if (f.amin || f.amax) n++; if (f.rmin || f.rmax) n++;
-  if (f.mmin || f.mmax) n++; if (f.fmin || f.fmax) n++; if (f.park) n++;
+  if (f.mmin || f.mmax) n++; if (f.fmin || f.fmax) n++; if (f.park) n++; if (f.kw) n++;
   if (f.use !== '住宅') n++; if (f.forms.length) n++; if (f.zone) n++;
-  if (!f.srcs.sinyi || !f.srcs.yc) n++;
+  if (SRC_IDS.some(function(k){ return !f.srcs[k]; })) n++;
   return n;
 }
 function rangeText(a, b, unit){ return a && b ? (a === b ? a + unit : a + '–' + b + unit) : a ? a + unit + '以上' : b ? b + unit + '以下' : ''; }
@@ -426,22 +436,26 @@ function renderSummary(){
   var p = rangeText(filter.pmin, filter.pmax, '萬'); if (p) s.push('總價 ' + p);
   var r = rangeText(filter.rmin, filter.rmax, '房'); if (r && filter.use !== '土地' && filter.use !== '車位') s.push(r);
   var a = rangeText(filter.amin, filter.amax, '坪'); if (a) s.push((filter.use === '土地' ? '地坪 ' : '建坪 ') + a);
+  if (filter.kw) s.push('關鍵字「' + filter.kw + '」');
   var mm = rangeText(filter.mmin, filter.mmax, '坪'); if (mm) s.push('主建物 ' + mm);
   var ff = rangeText(filter.fmin, filter.fmax, '樓'); if (ff) s.push('樓層 ' + ff);
   if (filter.park) s.push(filter.park === 'any' ? '有車位' : filter.park + '車位');
   s.push('用途：' + (filter.use || '不限'));
   if (filter.forms.length) s.push(filter.forms.join('、'));
   if (filter.zone) s.push('使用分區含「' + filter.zone + '」');
-  if (!filter.srcs.sinyi) s.push('不看信義'); if (!filter.srcs.yc) s.push('不看永慶');
+  SRCS.forEach(function(x){ if (!filter.srcs[x[0]]) s.push('不看' + x[1]); });
   $('summary').innerHTML = s.map(function(x){ return '<span class="sum">' + esc(x) + '</span>'; }).join('');
   var n = activeCount(filter); $('filterN').textContent = n; $('filterN').hidden = !n;
 }
 function renderSrcs(){
   if (favOnly){ $('srcs').innerHTML = ''; return; }
+  $('srcs').title = '各來源：已讀筆數／符合條件的總筆數';
   $('srcs').innerHTML = tasks.map(function(t, i){
     var cls = 'src' + (t.error ? ' err' : t.busy ? ' busy' : '');
-    var txt = t.error ? esc(t.error) + ' <button data-retry="' + i + '">重試</button>'
-      : t.total == null ? '讀取中…' : '已讀 <span class="num">' + fmt(Math.min(t.got, t.total)) + '</span>／<b class="num">' + fmt(t.total) + '</b> 筆';
+    if (t.skipped) cls += ' skip';
+    var txt = t.skipped ? esc(t.skipped.replace(/^(樂屋網|好房網|永慶)/, ''))
+      : t.error ? esc(t.error) + ' <button data-retry="' + i + '">重試</button>'
+      : t.total == null ? '讀取中…' : '<span class="num">' + fmt(Math.min(t.got, t.total)) + '</span>／<b class="num">' + fmt(t.total) + '</b>' + (t.kwLocal ? '（關鍵字由 App 逐頁比對）' : '');
     return '<span class="' + cls + '"><i class="dot"></i><b>' + SRC_NAME[t.src] + '</b>' + esc(t.city.slice(0, 2)) + ' ' + txt + '</span>';
   }).join('');
 }
@@ -457,6 +471,8 @@ function cardHtml(g){
   var seenTag = {}; tags = tags.filter(function(t){ if (seenTag[t]) return false; seenTag[t] = 1; return true; });
   if (g.members.length > 1) tags.push('<span class="tag">' + g.members.length + ' 筆同物件</span>');
   if (m.parking) tags.push('<span class="tag">含車位</span>');
+  var flags = {}; g.members.forEach(function(x){ (x.flags || []).forEach(function(fl){ flags[fl] = 1; }); });
+  Object.keys(flags).forEach(function(fl){ tags.push('<span class="tag flag">' + esc(fl) + '</span>'); });
   if (g.zone) tags.push('<span class="tag zone">' + esc(g.zone.length > 14 ? g.zone.slice(0, 14) + '…' : g.zone) + '</span>');
   var prices = g.members.map(function(x){ return x.price; }).filter(function(x){ return x != null; });
   var lo = Math.min.apply(null, prices), hi = Math.max.apply(null, prices);
@@ -493,7 +509,7 @@ function render(){
   }
   var totalAll = tasks.reduce(function(s, t){ return s + (t.total || 0); }, 0);
   var hiddenByZone = filter.zone ? items.filter(passes).length : 0;
-  count.innerHTML = '顯示 <span class="num">' + fmt(groups.length) + '</span> 筆 <small>／兩站合計約 <span class="num">' + fmt(totalAll) + '</span> 筆</small>';
+  count.innerHTML = '顯示 <span class="num">' + fmt(groups.length) + '</span> 筆 <small>／各站合計約 <span class="num">' + fmt(totalAll) + '</span> 筆</small>';
   list.innerHTML = groups.map(cardHtml).join('');
   var html = '';
   if (!tasks.length) html = '<div class="empty"><h3>沒有可搜尋的範圍</h3>請在篩選裡至少開啟一個縣市和一個來源。</div>';
@@ -524,6 +540,7 @@ function renderFilter(){
     h += '<div class="chips">' + CITIES[c].map(function(d){ return '<button class="chip' + (x.dists.indexOf(d) >= 0 ? ' on' : '') + '" data-dist="' + c + '|' + d + '"' + (x.on ? '' : ' disabled') + '>' + d.replace(/區$/, '') + '</button>'; }).join('') + '</div>';
   });
   h += '</div>';
+  h += '<div class="sec"><h3>路名／社區／建商</h3><div class="range"><input data-k="kw" placeholder="例如：敦化南路、帝寶、國泰建設" value="' + esc(f.kw || '') + '" maxlength="20" style="text-align:left" enterkeyhint="search"></div><p class="hint">一次填一個關鍵字，會比對物件的地址、社區名與標題。</p></div>';
   h += '<div class="sec"><h3>總價 <small>萬元</small></h3><div class="range"><input inputmode="numeric" pattern="[0-9]*" data-k="pmin" placeholder="最低" value="' + (f.pmin || '') + '"><span>–</span><input inputmode="numeric" pattern="[0-9]*" data-k="pmax" placeholder="最高" value="' + (f.pmax || '') + '"></div></div>';
   h += '<div class="sec"><h3>用途</h3><div class="chips">' + USES.map(function(u){ var v = u === '不限' ? '' : u; return '<button class="chip' + (f.use === v ? ' on' : '') + '" data-use="' + v + '">' + u + '</button>'; }).join('') + '</div>';
   var formOk = !f.use || f.use === '住宅';
@@ -539,14 +556,15 @@ function renderFilter(){
   h += '<div class="sec"><h3>車位</h3><div class="chips">' + PARKS.map(function(x){ return '<button class="chip' + (f.park === x[0] ? ' on' : '') + '" data-park="' + x[0] + '"' + (x[0] ? dis : '') + '>' + x[1] + '</button>'; }).join('') + '</div></div>';
   h += '<div class="sec"><h3>使用分區 <small>原「地目」</small></h3><div class="chips">' + ['不限'].concat(ZONES).map(function(z){ var v = z === '不限' ? '' : z; return '<button class="chip' + (f.zone === v ? ' on' : '') + '" data-zone="' + v + '">' + z + '</button>'; }).join('') + '</div>' +
     '<div class="range" style="margin-top:8px"><input data-k="zone" placeholder="或輸入關鍵字，例如：第三種住宅區" value="' + esc(ZONES.indexOf(f.zone) >= 0 ? '' : f.zone) + '" style="text-align:left"></div>' +
-    '<p class="hint">地目制度已廢止，兩家仲介現在標示的是「土地使用分區」。這項要逐筆讀取物件頁，搜尋後需再按一次讀取。</p></div>';
-  h += '<div class="sec"><h3>來源</h3><div class="chips">' + ['sinyi','yc'].map(function(s){ return '<button class="chip' + (f.srcs[s] ? ' on' : '') + '" data-src="' + s + '">' + (s === 'sinyi' ? '信義房屋' : '永慶房仲網') + '</button>'; }).join('') + '</div></div>';
+    '<p class="hint">地目制度已廢止，現在標示的是「土地使用分區」。這項只有永慶的物件讀得到，而且要逐筆讀取物件頁，搜尋後需再按一次讀取。</p></div>';
+  h += '<div class="sec"><h3>來源</h3><div class="chips">' + SRCS.map(function(x){ return '<button class="chip' + (f.srcs[x[0]] ? ' on' : '') + '" data-src="' + x[0] + '">' + x[2] + '</button>'; }).join('') + '</div><p class="hint">樂屋網上有信義、住商、中信、太平洋等各家的物件；好房網只能篩區域、總價、坪數、房數、樓層。</p></div>';
   var sc = $('filterBody').scrollTop; $('filterBody').innerHTML = h; $('filterBody').scrollTop = sc;
 }
 function readInputs(){
   Array.prototype.forEach.call($('filterBody').querySelectorAll('input[data-k]'), function(el){
     var k = el.getAttribute('data-k');
     if (k === 'zone'){ var v = el.value.trim(); if (v) draft.zone = v; else if (ZONES.indexOf(draft.zone) < 0) draft.zone = ''; }
+    else if (k === 'kw') draft.kw = el.value.trim();
     else draft[k] = toNum(el.value.replace(/[^\d]/g, ''));
   });
 }
@@ -568,7 +586,7 @@ $('filterBody').addEventListener('click', function(e){
   }
   else if (b.hasAttribute('data-park')){ draft.park = b.getAttribute('data-park'); }
   else if (b.hasAttribute('data-zone')){ draft.zone = b.getAttribute('data-zone'); var zi = $('filterBody').querySelector('input[data-k=zone]'); if (zi) zi.value = ''; }
-  else if ((v = b.getAttribute('data-src'))){ draft.srcs[v] = !draft.srcs[v]; if (!draft.srcs.sinyi && !draft.srcs.yc) draft.srcs[v === 'sinyi' ? 'yc' : 'sinyi'] = true; }
+  else if ((v = b.getAttribute('data-src'))){ draft.srcs[v] = !draft.srcs[v]; if (!SRC_IDS.some(function(k){ return draft.srcs[k]; })){ draft.srcs[v] = true; toast('至少要留一個來源'); } }
   else return;
   renderFilter();
 });
@@ -626,10 +644,10 @@ document.querySelector('main').addEventListener('keydown', function(e){
 /* ================= 明細、使用分區 ================= */
 function fetchDetails(list){
   // list: [{src,id}]，每次最多 8 筆，依來源分批
-  var by = { sinyi:[], yc:[] };
-  list.forEach(function(x){ if (!details[x.src + '|' + x.id]) by[x.src].push(x.id); });
+  var by = {};
+  list.forEach(function(x){ if (!details[x.src + '|' + x.id]) (by[x.src] = by[x.src] || []).push(x.id); });
   var jobs = [];
-  ['sinyi','yc'].forEach(function(src){
+  Object.keys(by).forEach(function(src){
     for (var i = 0; i < by[src].length; i += 8){
       (function(ids){
         jobs.push(function(){ return api({ action:'detail', src:src, ids:ids.join(',') }).then(function(j){
@@ -644,7 +662,7 @@ function fetchDetails(list){
   return Promise.all([next(), next()]);
 }
 function pendingDetailItems(){
-  return items.filter(passes).filter(function(x){ var d = details[x.src + '|' + x.id]; return !d || d.temp; });
+  return items.filter(passes).filter(function(x){ if (x.src !== 'yc') return false; var d = details[x.src + '|' + x.id]; return !d || d.temp; });
 }
 var zoneBusy = false;
 function loadZones(){
@@ -669,18 +687,20 @@ function openDetail(gid){
 function renderDetail(g){
   var m = g.main; $('dTitle').textContent = m.name || '物件';
   var d = null, loading = false, derr = null;
-  g.members.forEach(function(x){ var y = details[x.src + '|' + x.id]; if (!y) loading = true; else if (y.error) derr = y.error; else if (!d) d = y; });
+  var unsup = false;
+  g.members.forEach(function(x){ var y = details[x.src + '|' + x.id]; if (!y) loading = true; else if (y.error) derr = y.error; else if (y.unsupported) unsup = true; else if (!d) d = y; });
   var kv = [];
   function add(k, v){ if (v != null && v !== '') kv.push('<dt>' + k + '</dt><dd>' + v + '</dd>'); }
   add('地址', esc(m.addr) + (m.community ? '（' + esc(m.community) + '）' : ''));
   add('類型', esc(m.type));
-  add('建坪', m.ping ? '<span class="num">' + fmt(m.ping) + '</span> 坪' + (m.mainPing && m.mainPing !== m.ping ? '（主建物＋陽台 <span class="num">' + fmt(m.mainPing) + '</span>）' : '') : '');
+  add('建坪', m.ping ? '<span class="num">' + fmt(m.ping) + '</span> 坪' + (m.mainPing && m.mainPing !== m.ping ? '（' + (m.mainExact ? '主建物' : '主建物＋陽台') + ' <span class="num">' + fmt(m.mainPing) + '</span>）' : '') : '');
   var land = (d && d.landPing) || m.landPing; add('土地坪數', land ? '<span class="num">' + fmt(land) + '</span> 坪' : '');
   add('格局', esc(m.layout)); add('樓層', m.floor ? esc(m.floor) + ' 樓' : '');
   add('屋齡', m.presale ? '預售' : (m.age != null ? '<span class="num">' + fmt(m.age) + '</span> 年' : ''));
   add('車位', m.parking ? '有（價格含車位）' : '');
   if (d){ add('登記用途', esc(d.purpose)); add('使用分區', esc(d.zoning)); (d.extra || []).forEach(function(p){ if (!/土地坪數|建物坪數|建物格局|單價|社區/.test(p[0])) add(esc(p[0]), esc(p[1])); }); }
   else if (loading && cfg.api) kv.push('<dt>登記用途</dt><dd><span class="spin"></span> 讀取中…</dd><dt>使用分區</dt><dd><span class="spin"></span> 讀取中…</dd>');
+  else if (unsup && !derr) kv.push('<dt>登記用途／使用分區</dt><dd>這個來源的列表沒有提供，請按「看原頁」查看</dd>');
   else if (derr) kv.push('<dt>登記用途／使用分區</dt><dd style="color:var(--err)">讀取失敗：' + esc(derr) + '</dd>');
   var big = m.imgL || m.img;
   var h = (big ? '<img class="d-img" referrerpolicy="no-referrer" alt="" src="' + esc(big) + '" onerror="this.remove()">' : '') +
@@ -713,9 +733,9 @@ $('cfgSave').onclick = function(){
   cfgLog('測試中…');
   var lines = [], f = JSON.stringify({ city:'台北市', dists:['大安區'], use:'住宅' });
   api({ action:'ping' }).then(function(j){
-    lines.push('✔ 後端連線成功（版本 ' + j.version + '）'); cfgLog(lines.join('\n') + '\n測試讀取兩家網站…');
-    return Promise.all(['sinyi','yc'].map(function(src){
-      return api({ action:'search', src:src, page:1, f:f }).then(function(r){ lines.push('✔ ' + SRC_NAME[src] + '：讀到 ' + r.items.length + ' 筆（大安區住宅共 ' + r.total + ' 筆）'); },
+    lines.push('✔ 後端連線成功（版本 ' + j.version + '）'); cfgLog(lines.join('\n') + '\n測試讀取各來源…');
+    return Promise.all(SRC_IDS.map(function(src){
+      return api({ action:'search', src:src, page:1, f:f }).then(function(r){ lines.push('✔ ' + SRC_NAME[src] + '：讀到 ' + r.items.length + ' 筆（大安區住宅約 ' + r.total + ' 筆）'); },
         function(e){ lines.push('✘ ' + SRC_NAME[src] + '：' + e.message); });
     }));
   }).then(function(){ cfgLog(lines.join('\n')); startSearch(); }, function(e){ cfgLog('✘ ' + e.message); });
